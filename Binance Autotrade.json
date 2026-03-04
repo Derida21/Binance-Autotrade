@@ -1,0 +1,3715 @@
+{
+  "name": "Binance Autotrade",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1152,
+        -544
+      ],
+      "id": "23e94a50-90ed-4cc9-8738-bf57a4f9479a",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $items(\"OHLC\").map(item => ({\n  time: item.json[0],\n  open: parseFloat(item.json[1]),\n  high: parseFloat(item.json[2]),\n  low: parseFloat(item.json[3]),\n  close: parseFloat(item.json[4]),\n  volume: parseFloat(item.json[5])\n}));\n\nconst length = 5; \nconst mitigationMethod = 'Wick'; \n\nlet bullishOB = [];\nlet bearishOB = [];\nlet os = 0; \n\nfor (let i = 0; i < data.length; i++) {\n  \nif (i >= length) {\n  const prevHigh = Math.max(...data.slice(i - length, i).map(d => d.high));\n  const prevLow  = Math.min(...data.slice(i - length, i).map(d => d.low));\n\n  const currentClose = data[i].close;\n  if (currentClose > prevHigh) {\n    os = 1;\n  }\n  else if (currentClose < prevLow) {\n    os = 0;\n  }\n}\n  if (i >= length * 2) {\n    const pIdx = i - length; \n    const targetVol = data[pIdx].volume;\n    \n    const leftVol = data.slice(pIdx - length, pIdx).map(d => d.volume);\n    const rightVol = data.slice(pIdx + 1, pIdx + length + 1).map(d => d.volume);\n\n    const isPHV = targetVol > Math.max(...leftVol) && targetVol >= Math.max(...rightVol);\n\n    if (isPHV) {\n      const targetCandle = data[pIdx];\n      const hl2 = (targetCandle.high + targetCandle.low) / 2;\n\n      if (os === 1) {\n        bullishOB.unshift({\n          time: targetCandle.time,\n          top: hl2, \n          bottom: targetCandle.low, \n          avg: (hl2 + targetCandle.low) / 2, \n          mitigated: false\n        });\n      } \n      // Bearish OB: os == 0 \n      else if (os === 0) {\n        bearishOB.unshift({\n          time: targetCandle.time,\n          top: targetCandle.high, \n          bottom: hl2,  \n          avg: (targetCandle.high + hl2) / 2, \n          mitigated: false\n        });\n      }\n    }\n  }\n\n  const currentBar = data[i];\n  \n  const bullPrice = mitigationMethod === 'Close' ? currentBar.close : currentBar.low;\n  const bearPrice = mitigationMethod === 'Close' ? currentBar.close : currentBar.high;\n\n  bullishOB = bullishOB.filter(ob => !(bullPrice < ob.bottom));\n\n  bearishOB = bearishOB.filter(ob => !(bearPrice > ob.top));\n}\n\nreturn [{\n  symbol: $('Loop Over Items').first().json.Pair,\n  timeframe: \"1H\",\n  totalCandles: data.length,\n  bullishOB: bullishOB.slice(0, 10),\n  bearishOB: bearishOB.slice(0, 10),\n  lastPrice: data[data.length - 1].close\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        96,
+        -400
+      ],
+      "id": "f81bac87-df18-4d5d-85c9-e0e5c6abb514",
+      "name": "orderblock-detector"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1YySIVUPYKPjTuZ9GuVk_f8wOGZKbfJlUBdpZI6FfBq8",
+          "mode": "list",
+          "cachedResultName": "user-account",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1YySIVUPYKPjTuZ9GuVk_f8wOGZKbfJlUBdpZI6FfBq8/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 622124875,
+          "mode": "list",
+          "cachedResultName": "Sheet2",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1YySIVUPYKPjTuZ9GuVk_f8wOGZKbfJlUBdpZI6FfBq8/edit#gid=622124875"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -880,
+        -400
+      ],
+      "id": "ec96a37d-2008-4b75-9bd0-c545d2e22a1e",
+      "name": "api-account",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "h88H41rnVTqQz4v5",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -624,
+        -400
+      ],
+      "id": "762e6869-feac-45c9-afdf-b37d5f781fec",
+      "name": "Loop Over Items",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const timestamp = Date.now();\nconst recvWindow = $json.recvWindow;\n\nconst queryString = `timestamp=${timestamp}&recvWindow=${recvWindow}`;\n\nreturn [{\n  json: {\n    ...$json,\n    timestamp,\n    queryString\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        -384
+      ],
+      "id": "8ec4a451-d553-4bc0-b96c-1e2b3ec37d90",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "action": "hmac",
+        "type": "SHA256",
+        "value": "={{ $json.queryString }}",
+        "dataPropertyName": "signature",
+        "secret": "={{ $('Loop Over Items').first().json[\"Secret Key\"] }}"
+      },
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 1,
+      "position": [
+        1248,
+        -384
+      ],
+      "id": "f6f27346-e500-4f6e-a741-4b504eaa4f2a",
+      "name": "Crypto"
+    },
+    {
+      "parameters": {
+        "jsCode": "const url =\n  `${$('base-api').first().json.urlBase}/fapi/v2/account?` +\n  `${$(\"Crypto\").first().json.queryString}&signature=${$(\"Crypto\").first().json.signature}`;\n\nreturn [{\n  json: {\n    url,\n    apiKey: $('Loop Over Items').first().json[\"API Key\"]\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1456,
+        -384
+      ],
+      "id": "3d36205c-1594-46ae-8a43-47152068cfe4",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-MBX-APIKEY",
+              "value": "={{ $json.apiKey }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1664,
+        -384
+      ],
+      "id": "16c260c6-31e5-437b-8936-533e517ee143",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "jsCode": "const account = $json;\n\n// pastikan ada positions\nif (!account.positions || !Array.isArray(account.positions)) {\n  return [{ json: { hasPosition: false } }];\n}\n\n// cari posisi aktif (size ≠ 0)\nconst activePosition = account.positions.find(p => \n  parseFloat(p.positionAmt) !== 0\n);\n\nif (!activePosition) {\n  return [{ json: { hasPosition: false } }];\n}\n\nconst size = parseFloat(activePosition.positionAmt);\nconst entryPrice = parseFloat(activePosition.entryPrice);\nconst unrealizedPnL = parseFloat(activePosition.unrealizedProfit);\n\n// tentukan side\nlet side;\nif (size > 0) side = \"BUY\";\nif (size < 0) side = \"SELL\";\n\nreturn [{\n  json: {\n    hasPosition: true,\n    symbol: activePosition.symbol,\n    side: side,\n    size: Math.abs(size),\n    entryPrice: entryPrice,\n    unrealizedPnL: unrealizedPnL\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1872,
+        -384
+      ],
+      "id": "4f31a22e-02fa-4ea0-8574-9094b0640863",
+      "name": "check-position"
+    },
+    {
+      "parameters": {
+        "content": "## Order Block Detector",
+        "height": 272,
+        "width": 896
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -176,
+        -480
+      ],
+      "typeVersion": 1,
+      "id": "3d534b9f-d0c9-4c3f-b1f2-829bbdd94668",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "## Check Position",
+        "height": 272,
+        "width": 1472,
+        "color": 2
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        768,
+        -480
+      ],
+      "typeVersion": 1,
+      "id": "4006ffdf-df0a-4ff3-beb7-cbc3244e057e",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "130c5059-ae9e-422c-95d3-739ff42d140e",
+              "leftValue": "={{ $json.hasPosition }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -128,
+        80
+      ],
+      "id": "dfdf59ba-935f-43d5-8bd3-3513b98e4477",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "jsCode": "const url =\n  `${$(\"base-api\").first().json.urlBase}/fapi/v1/allAlgoOrders?` +\n  `${$(\"Crypto1\").first().json.queryString}&signature=${$(\"Crypto1\").first().json.signature}`;\n\nreturn [{\n  json: {\n    url,\n    apiKey: $('Loop Over Items').first().json[\"API Key\"]\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1024,
+        64
+      ],
+      "id": "18d2c718-3335-4d5a-b739-53a0ccc1018e",
+      "name": "Code in JavaScript2"
+    },
+    {
+      "parameters": {
+        "jsCode": "const timestamp = Date.now();\nconst recvWindow = $json.recvWindow;\n\nconst queryString = `symbol=${$('Loop Over Items').first().json.Pair}&timestamp=${timestamp}&recvWindow=${recvWindow}`;\n\nreturn [{\n  json: {\n    ...$json,\n    timestamp,\n    queryString\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        592,
+        64
+      ],
+      "id": "71dddb49-32ce-491b-8941-d8722e061cdf",
+      "name": "Code in JavaScript3"
+    },
+    {
+      "parameters": {
+        "action": "hmac",
+        "type": "SHA256",
+        "value": "={{ $json.queryString }}",
+        "dataPropertyName": "signature",
+        "secret": "={{ $('Loop Over Items').first().json['Secret Key']}}"
+      },
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 1,
+      "position": [
+        800,
+        64
+      ],
+      "id": "0ef6d845-5f20-4b28-ace0-b6acd65ba3c7",
+      "name": "Crypto1"
+    },
+    {
+      "parameters": {
+        "content": "# Risk Reward Handler",
+        "height": 896,
+        "width": 5792,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -192,
+        -144
+      ],
+      "typeVersion": 1,
+      "id": "cf3159fa-bb36-444c-9536-48d2e54bc1a4",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $items(\"OHLC\").map(item => ({\n  time: Number(item.json[0]),\n  open: parseFloat(item.json[1]),\n  high: parseFloat(item.json[2]),\n  low: parseFloat(item.json[3]),\n  close: parseFloat(item.json[4])\n}));\n\nconst obRows = $items('ob-history');\nif (!data.length || !obRows.length) return [{ json: { error: \"Data missing\" } }];\n\nconst latestRow = obRows[obRows.length - 1].json;\nconst ob = { time: Number(latestRow.time), type: String(latestRow.type).toLowerCase() };\nconst obIndex = data.findIndex(c => Math.abs(c.time - ob.time) < 1000);\n\nconst after = data.slice(obIndex + 1);\nlet B = null, C = null, indexB = 0;\n\nif (ob.type === \"bearish\") {\n  let lowest = after[0].low;\n  for (let i = 0; i < after.length; i++) {\n    if (after[i].low < lowest) { lowest = after[i].low; indexB = i; }\n  }\n  B = lowest;\n  const afterB = after.slice(indexB + 1);\n  if (afterB.length) {\n    let highestC = afterB[0].high;\n    for (let i = 0; i < afterB.length; i++) {\n      if (afterB[i].high > highestC) highestC = afterB[i].high;\n    }\n    C = highestC;\n  }\n} else {\n  let highest = after[0].high;\n  for (let i = 0; i < after.length; i++) {\n    if (after[i].high > highest) { highest = after[i].high; indexB = i; }\n  }\n  B = highest;\n  const afterB = after.slice(indexB + 1);\n  if (afterB.length) {\n    let lowestC = afterB[0].low;\n    for (let i = 0; i < afterB.length; i++) {\n      if (afterB[i].low < lowestC) lowestC = afterB[i].low;\n    }\n    C = lowestC;\n  }\n}\nif (C === null) C = (ob.type === \"bearish\") ? after[after.length - 1].high : after[after.length - 1].low;\n\nlet A = null;\nconst before = data.slice(Math.max(0, obIndex - 500), obIndex);\n\nif (ob.type === \"bearish\") {\n  for (let i = before.length - 6; i > 5; i--) {\n    const currentHigh = before[i].high;\n    const isMajorPeak = before.slice(i - 5, i + 6).every(d => currentHigh >= d.high);\n    \n    if (isMajorPeak && currentHigh > C) {\n      A = currentHigh;\n      break; \n    }\n  }\n  if (!A) {\n    const proximalRange = before.slice(-100);\n    A = Math.max(...proximalRange.map(d => d.high));\n  }\n} else {\n  for (let i = before.length - 6; i > 5; i--) {\n    const currentLow = before[i].low;\n    const isMajorValley = before.slice(i - 5, i + 6).every(d => currentLow <= d.low);\n    \n    if (isMajorValley && currentLow < C) {\n      A = currentLow;\n      break;\n    }\n  }\n  if (!A) {\n    const proximalRange = before.slice(-100);\n    A = Math.min(...proximalRange.map(d => d.low));\n  }\n}\n\nconst AB = Math.abs(B - A);\nconst BC = Math.abs(C - B);\nconst retracement = AB > 0 ? BC / AB : 0;\n\nlet classification = retracement <= 0.7 ? \"middle\" : \"beginning\";\nlet fiboLevel = classification === \"beginning\" ? 1.0 : 0.786;\n\nlet structureValid = (ob.type === \"bearish\") ? (A > C && C > B) : (A < C && C < B);\n\nreturn [{\n  json: {\n    symbol: latestRow.symbol || \"BTCUSDT\",\n    type: ob.type,\n    structureValid,\n    classification,\n    retracement: Number(retracement.toFixed(3)),\n    fiboLevel,\n    A: Number(A.toFixed(1)),\n    B: Number(B.toFixed(1)),\n    C: Number(C.toFixed(1)),\n    tp: Number((ob.type === \"bearish\" ? C - (AB * fiboLevel) : C + (AB * fiboLevel)).toFixed(1))\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        352,
+        64
+      ],
+      "id": "cc1de910-0009-4f6b-a26c-5e668e8a98ad",
+      "name": "search-for-ABCvalue"
+    },
+    {
+      "parameters": {
+        "url": "={{$('base-api').first().json.urlBase}}/fapi/v1/ticker/price?symbol={{ $('Loop Over Items').first().json.Pair }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1696,
+        64
+      ],
+      "id": "5e0b80f7-13bc-4477-8fe2-b0b83c6fdf95",
+      "name": "get-price"
+    },
+    {
+      "parameters": {
+        "jsCode": "const url =\n  `${$(\"base-api\").first().json.urlBase}/fapi/v1/algoOrder?` +\n  `${$(\"Crypto2\").first().json.queryString}&signature=${$(\"Crypto2\").first().json.signature}`;\n\nreturn [{\n  json: {\n    url,\n    apiKey: $('Loop Over Items').first().json[\"API Key\"]\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3440,
+        32
+      ],
+      "id": "8f0b17d4-ddb0-4e97-aa74-ba82b86c840f",
+      "name": "Code in JavaScript4"
+    },
+    {
+      "parameters": {
+        "jsCode": "const timestamp = Date.now();\nconst recvWindow = $('base-api').first().json.recvWindow;\nconst algoId = $('sorting-sl-tp').first().json.stopLossAlgoId;\nconst clientId = $('sorting-sl-tp').first().json.stopLossClientId\nconst symbol = $('Loop Over Items').first().json.Pair\n\n\nconst queryString = `symbol=${symbol}&algoId=${algoId}&clientAlgoId=${clientId}&timestamp=${timestamp}&recvWindow=${recvWindow}`;\n\nreturn [{\n  json: {\n    ...$json,\n    timestamp,\n    queryString\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3008,
+        32
+      ],
+      "id": "e4e4754a-0d75-4e05-baa8-9df80887a781",
+      "name": "Code in JavaScript5"
+    },
+    {
+      "parameters": {
+        "action": "hmac",
+        "type": "SHA256",
+        "value": "={{ $json.queryString }}",
+        "dataPropertyName": "signature",
+        "secret": "={{ $('Loop Over Items').first().json['Secret Key']}}"
+      },
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 1,
+      "position": [
+        3216,
+        32
+      ],
+      "id": "9c2f7f27-ed72-4b1a-bc4d-699fc6c67fa7",
+      "name": "Crypto2"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nlet stopLoss = null;\nlet stopLossAlgoId = null;\nlet stopLossClientId = null;\nlet stopLossType = null;\n\nlet takeProfit = null;\nlet takeProfitAlgoId = null;\nlet takeProfitClientId = null;\nlet takeProfitType = null;\n\nlet positionSide = null;\n\nfor (const item of items) {\n\n  const order = item.json;\n\n  if (!order || order.algoStatus !== \"NEW\") continue;\n\n  // ======================\n  // STOP LOSS\n  // ======================\n  if (order.orderType === \"STOP_MARKET\") {\n\n    stopLoss = parseFloat(order.triggerPrice);\n    stopLossAlgoId = order.algoId;\n    stopLossClientId = order.clientAlgoId;\n    stopLossType = order.orderType;\n\n    if (order.side === \"SELL\") {\n      positionSide = \"BUY\";\n    } else if (order.side === \"BUY\") {\n      positionSide = \"SELL\";\n    }\n  }\n  \n  if (order.orderType === \"TAKE_PROFIT_MARKET\") {\n\n    takeProfit = Number(parseFloat(order.triggerPrice));\n    takeProfitAlgoId = order.algoId;\n    takeProfitClientId = order.clientAlgoId;\n    takeProfitType = order.orderType;\n  }\n}\n\nreturn [{\n  json: {\n    hasSL: stopLoss !== null,\n    hasTP: takeProfit !== null,\n    side: positionSide,\n\n    stopLoss,\n    stopLossAlgoId,\n    stopLossClientId,\n    stopLossType,\n\n    takeProfit,\n    takeProfitAlgoId,\n    takeProfitClientId,\n    takeProfitType\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1472,
+        64
+      ],
+      "id": "445025f9-1bd4-4fde-8c07-f1eddfd26b76",
+      "name": "sorting-sl-tp"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-MBX-APIKEY",
+              "value": "={{$('Loop Over Items').first().json[\"API Key\"]}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1248,
+        64
+      ],
+      "id": "12f7f842-3ded-4f51-ac9d-2daf52c49e07",
+      "name": "get-sl-tp",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const url =\n  `${$('base-api').first().json.urlBase}/fapi/v1/algoOrder?` +\n  `${$(\"Crypto3\").first().json.queryString}&signature=${$(\"Crypto3\").first().json.signature}`;\n\nreturn [{\n  json: {\n    url,\n    apiKey: $('Loop Over Items').first().json[\"API Key\"]\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4576,
+        32
+      ],
+      "id": "8e43df85-4df4-4a6e-9ec6-e32af7e2d79f",
+      "name": "Code in JavaScript6"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-MBX-APIKEY",
+              "value": "={{$('Loop Over Items').first().json['API Key']}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        4800,
+        32
+      ],
+      "id": "09ea912a-f5d1-487a-bbcd-8409a3529422",
+      "name": "HTTP Request3",
+      "alwaysOutputData": false,
+      "retryOnFail": true,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const timestamp = Date.now();\nconst recvWindow = $('base-api').first().json.recvWindow;\nconst symbol = $('Loop Over Items').first().json.Pair;\nconst side = $('check-sl-side').first().json.side;\nconst type = \"STOP_MARKET\";\nconst closePosition = true\nconst stopprice = $('set-new-sl').first().json.newSL;\n// const reduceOnly = true;\n// const quantity = $('Loop Over Items').first().json.Size;\nconst workingType = \"CONTRACT_PRICE\"\n\nconst queryString = `algoType=CONDITIONAL&symbol=${symbol}&side=${side}&type=${type}&closePosition=${closePosition}&workingType=${workingType}&triggerPrice=${stopprice}&timestamp=${timestamp}&recvWindow=${recvWindow}`;\n\nreturn [{\n  json: {\n    ...$json,\n    timestamp,\n    queryString\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4128,
+        32
+      ],
+      "id": "b364467c-3c54-49db-8d25-513762cd6820",
+      "name": "Code in JavaScript7"
+    },
+    {
+      "parameters": {
+        "action": "hmac",
+        "type": "SHA256",
+        "value": "={{ $json.queryString }}",
+        "dataPropertyName": "signature",
+        "secret": "={{ $('Loop Over Items').first().json['Secret Key']}}"
+      },
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 1,
+      "position": [
+        4352,
+        32
+      ],
+      "id": "76ccbdeb-c443-412b-a543-36d8feefcb0f",
+      "name": "Crypto3"
+    },
+    {
+      "parameters": {
+        "method": "DELETE",
+        "url": "={{ $json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-MBX-APIKEY",
+              "value": "={{$('Loop Over Items').first().json[\"API Key\"]}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        3664,
+        32
+      ],
+      "id": "e1d9d79d-7fd7-40c2-bfa1-2c92d52c2614",
+      "name": "delete-sl"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "f49a6aaa-5657-4a08-a175-ec874f71b010",
+              "leftValue": "={{ $('sorting-sl-tp').first().json.takeProfitAlgoId }}",
+              "rightValue": "=",
+              "operator": {
+                "type": "number",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2528,
+        368
+      ],
+      "id": "dbd2e3e1-4c83-4a27-b309-5a584f85fea7",
+      "name": "If3"
+    },
+    {
+      "parameters": {
+        "jsCode": "const entryPrice = $('If').first().json.entryPrice;\nconst lastPrice = $('get-price').first().json.price;\nconst side = $('check-position').first().json.side;        \nconst currentSL = Number($('sorting-sl-tp').first().json.stopLoss);\n\nif (!entryPrice || !lastPrice || !side) {\n  return [{ json: { error: \"Missing entryPrice, lastPrice, or side\" } }];\n}\n\nlet percentMove;\n\nif (side === \"BUY\") {\n  percentMove = ((lastPrice - entryPrice) / entryPrice) * 100;\n} else if (side === \"SELL\") {\n  percentMove = ((entryPrice - lastPrice) / entryPrice) * 100;\n}\n\nlet newSL = currentSL;\nlet action = \"NO_CHANGE\";\nlet tp1 = null;\n\nif (percentMove >= 8) {\n  newSL = side === \"BUY\" \n    ? entryPrice * 1.04 \n    : entryPrice * 0.96;\n    \n  action = \"MOVE_SL_TO_4_PERCENT_AND_TP1\";\n  \n  tp1 = {\n    type: \"TAKE_PROFIT_MARKET\",\n    side: side === \"BUY\" ? \"SELL\" : \"BUY\", \n    stopPrice: Number(lastPrice.toFixed(1)), \n    reduceOnly: true,\n    quantity_factor: 0.5 \n  };\n} \n\nelse if (percentMove >= 4) {\n  newSL = side === \"BUY\" ? entryPrice * 1.02 : entryPrice * 0.98;\n  action = \"MOVE_SL_TO_2_PERCENT\";\n}\n\nelse if (percentMove >= 2) {\n  newSL = entryPrice;\n  action = \"MOVE_SL_TO_ENTRY\";\n}\n\nif (side === \"BUY\") {\n  if (newSL < currentSL) newSL = currentSL;\n} else if (side === \"SELL\") {\n  if (newSL > currentSL) newSL = currentSL;\n}\n\nreturn [{\n  json: {\n    entryPrice,\n    lastPrice,\n    side,\n    currentSL,\n    newSL: Number(newSL.toFixed(1)),\n    percentMove: Number(percentMove.toFixed(2)),\n    tp1,\n    action\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1936,
+        64
+      ],
+      "id": "045a8457-f95e-4e7f-bc2f-4b86c082bb1e",
+      "name": "set-new-sl"
+    },
+    {
+      "parameters": {
+        "jsCode": "const url =\n  `${$('base-api').first().json.urlBase}/fapi/v1/algoOrder?` +\n  `${$(\"Crypto5\").first().json.queryString}&signature=${$(\"Crypto5\").first().json.signature}`;\n\nreturn [{\n  json: {\n    url,\n    apiKey: $('Loop Over Items').first().json[\"API Key\"]\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4976,
+        352
+      ],
+      "id": "602d7478-0c60-459f-9805-9cc9c79b030f",
+      "name": "Code in JavaScript10"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-MBX-APIKEY",
+              "value": "={{$('Loop Over Items').first().json['API Key']}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        5184,
+        352
+      ],
+      "id": "c1232c55-d5d5-4d24-9640-80a11d13ad0d",
+      "name": "HTTP Request5",
+      "alwaysOutputData": false,
+      "retryOnFail": true,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const timestamp = Date.now();\nconst recvWindow = $('base-api').first().json.recvWindow;\nconst symbol = $('Loop Over Items').first().json.Pair;\nconst side = $('check-tp-side').first().json.side;\nconst type = \"TAKE_PROFIT_MARKET\";\nconst stopprice = $('search-for-ABCvalue').first().json.tp;\nconst closePosition = true;\nconst quantity = $('Loop Over Items').first().json.Size;\nconst workingType = \"CONTRACT_PRICE\"\n\n  const queryString = `algoType=CONDITIONAL&symbol=${symbol}&side=${side}&type=${type}&closePosition=${closePosition}&workingType=${workingType}&triggerPrice=${stopprice}&timeInForce=GTC&timestamp=${timestamp}&recvWindow=${recvWindow}`;\n\nreturn [{\n  json: {\n    ...$json,\n    timestamp,\n    queryString\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4576,
+        352
+      ],
+      "id": "5cd37798-0973-4582-ba54-fdb547bc6091",
+      "name": "Code in JavaScript11"
+    },
+    {
+      "parameters": {
+        "action": "hmac",
+        "type": "SHA256",
+        "value": "={{ $json.queryString }}",
+        "dataPropertyName": "signature",
+        "secret": "={{ $('Loop Over Items').first().json['Secret Key']}}"
+      },
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 1,
+      "position": [
+        4768,
+        352
+      ],
+      "id": "d011a532-0f94-4631-9e1c-560494ae2279",
+      "name": "Crypto5"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "34456440-84fa-4b01-8896-e35bfc190fc8",
+              "leftValue": "={{ $('sorting-sl-tp').first().json.takeProfit }}",
+              "rightValue": "={{ $('search-for-ABCvalue').first().json.tp }}",
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2768,
+        320
+      ],
+      "id": "9eb56154-990f-44d7-9092-8cbcddb785ea",
+      "name": "If5"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        3888,
+        368
+      ],
+      "id": "71199aad-d4df-4cfe-989c-2df17bbbb496",
+      "name": "Merge1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const timestamp = Date.now();\nconst recvWindow = $('base-api').first().json.recvWindow;\nconst symbol = $('Loop Over Items').first().json.Pair;\n\nconst queryString = `timestamp=${timestamp}&recvWindow=${recvWindow}`;\n\nreturn [{\n  json: {\n    ...$json,\n    timestamp,\n    queryString\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -144,
+        1200
+      ],
+      "id": "c63390c9-fa32-4bd7-a560-4010e8c580b5",
+      "name": "Code in JavaScript15"
+    },
+    {
+      "parameters": {
+        "action": "hmac",
+        "type": "SHA256",
+        "value": "={{ $json.queryString }}",
+        "dataPropertyName": "signature",
+        "secret": "={{ $('Loop Over Items').first().json['Secret Key']}}"
+      },
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 1,
+      "position": [
+        64,
+        1200
+      ],
+      "id": "c63f523f-ff30-4022-aa0c-5dc3d0785eb0",
+      "name": "Crypto7"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-MBX-APIKEY",
+              "value": "={{$('Loop Over Items').first().json['API Key']}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        496,
+        1200
+      ],
+      "id": "40f7a254-1fa7-473a-bb39-d23f966f59c5",
+      "name": "check-limit-order",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const orders = $input.all();\n\nlet hasOrders = false;\nlet limitOrders = [];\nlet stopOrders = [];\nlet takeProfitOrders = [];\n\nfor (const item of orders) {\n  const data = item.json;\n\n  if (data.type === \"LIMIT\" && data.status === \"NEW\") {\n    hasOrders = true;\n    limitOrders.push({\n      orderId: data.orderId,\n      symbol: data.symbol,\n      side: data.side,\n      price: parseFloat(data.price)\n    });\n  }\n\n  if (data.algoStatus === \"NEW\" || data.status === \"NEW\") {\n    \n    if (data.orderType === \"STOP_MARKET\") {\n      hasOrders = true;\n      stopOrders.push({\n        orderId: data.algoId,\n        clientId: data.clientAlgoId,\n        symbol: data.symbol,\n        side: data.side,\n        price: parseFloat(data.triggerPrice)\n      });\n    }\n\n    if (data.orderType === \"TAKE_PROFIT_MARKET\") {\n      hasOrders = true;\n      takeProfitOrders.push({\n        orderId: data.algoId,\n        clientId: data.clientAlgoId,\n        symbol: data.symbol,\n        side: data.side,\n        price: parseFloat(data.triggerPrice)\n      });\n    }\n  }\n}\n\nreturn [{\n  json: {\n    hasOrders,\n    limitOrders,\n    stopOrders,\n    takeProfitOrders,\n    totalOpen: limitOrders.length + stopOrders.length + takeProfitOrders.length\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1040,
+        1104
+      ],
+      "id": "1fb6d91a-720c-4b9a-95d7-f20a93b31dd4",
+      "name": "Code in JavaScript16"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "3a8634d6-2cfe-4d2e-b528-6ed1151b56c8",
+              "leftValue": "={{ $json.hasOrders }}",
+              "rightValue": "=true",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1232,
+        1104
+      ],
+      "id": "bc22a430-7ece-4f78-adf1-ece0785e541b",
+      "name": "If6"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "14bb74dd-9fb3-4ee3-b72c-c988c7cc07b4",
+              "leftValue": "={{ $json.limitOrders[0].price }}",
+              "rightValue": "={{ $('get-latest-OB').first().json.latestOB.avg }}",
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1440,
+        1088
+      ],
+      "id": "e0c2138e-c08c-495b-8dab-08659430a45d",
+      "name": "If7"
+    },
+    {
+      "parameters": {
+        "jsCode": "const url =\n  `${$('base-api').first().json.urlBase}/fapi/v1/openOrders?` +\n  `${$(\"Crypto7\").first().json.queryString}&signature=${$(\"Crypto7\").first().json.signature}`;\n\nreturn [{\n  json: {\n    url,\n    apiKey: $('Loop Over Items').first().json[\"API Key\"]\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        272,
+        1200
+      ],
+      "id": "1ab45b3d-707f-4878-9599-b86a5f46a207",
+      "name": "Code in JavaScript14"
+    },
+    {
+      "parameters": {
+        "jsCode": "const timestamp = Date.now();\nconst recvWindow = $json.recvWindow;\nconst symbol = $('Loop Over Items').first().json.Pair;\nconst orderId = $input.first().json.limitOrders[0].orderId\n\nconst queryString = `symbol=${symbol}&orderId=${orderId}&timestamp=${timestamp}&recvWindow=${recvWindow}`;\n\nreturn [{\n  json: {\n    ...$json,\n    timestamp,\n    queryString\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1888,
+        992
+      ],
+      "id": "12b90d62-1ed7-4029-940c-a26ff147e706",
+      "name": "Code in JavaScript17"
+    },
+    {
+      "parameters": {
+        "action": "hmac",
+        "type": "SHA256",
+        "value": "={{ $json.queryString }}",
+        "dataPropertyName": "signature",
+        "secret": "={{ $('Loop Over Items').first().json['Secret Key']}}"
+      },
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 1,
+      "position": [
+        2112,
+        992
+      ],
+      "id": "4740510f-6bb4-4879-b88b-f8a47ee1820d",
+      "name": "Crypto8"
+    },
+    {
+      "parameters": {
+        "jsCode": "const url =\n  `${$('base-api').first().json.urlBase}/fapi/v1/order?` +\n  `${$(\"Crypto8\").first().json.queryString}&signature=${$(\"Crypto8\").first().json.signature}`;\n\nreturn [{\n  json: {\n    url,\n    apiKey: $('Loop Over Items').first().json[\"API Key\"]\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2320,
+        992
+      ],
+      "id": "5301463e-f6e2-49d0-84f9-89f86af61428",
+      "name": "Code in JavaScript18"
+    },
+    {
+      "parameters": {
+        "method": "DELETE",
+        "url": "={{ $json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-MBX-APIKEY",
+              "value": "={{$('Loop Over Items').first().json['API Key']}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        2544,
+        992
+      ],
+      "id": "51318009-844c-465b-868b-2af8dad73243",
+      "name": "delete-limit-order"
+    },
+    {
+      "parameters": {
+        "jsCode": "const url =\n  `${$(\"Crypto\").first().json.urlBase}/fapi/v1/algoOrder?` +\n  `${$(\"Crypto9\").first().json.queryString}&signature=${$(\"Crypto9\").first().json.signature}`;\n\nreturn [{\n  json: {\n    url,\n    apiKey: $('Loop Over Items').first().json[\"API Key\"]\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3440,
+        336
+      ],
+      "id": "e3eccc17-2a64-4c5d-b55e-82b39e243943",
+      "name": "Code in JavaScript19"
+    },
+    {
+      "parameters": {
+        "jsCode": "const timestamp = Date.now();\nconst recvWindow = $('base-api').first().json.recvWindow;\nconst algoId = $('sorting-sl-tp').first().json.takeProfitAlgoId;\nconst clientId = $('sorting-sl-tp').first().json.takeProfitClientId\nconst symbol = $('Loop Over Items').first().json.Pair\n\n\nconst queryString = `symbol=${symbol}&algoId=${algoId}&clientAlgoId=${clientId}&timestamp=${timestamp}&recvWindow=${recvWindow}`;\n\nreturn [{\n  json: {\n    ...$json,\n    timestamp,\n    queryString\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3008,
+        336
+      ],
+      "id": "bb837136-1f21-44af-9208-e06d3c2006f7",
+      "name": "Code in JavaScript20"
+    },
+    {
+      "parameters": {
+        "action": "hmac",
+        "type": "SHA256",
+        "value": "={{ $json.queryString }}",
+        "dataPropertyName": "signature",
+        "secret": "={{ $('Loop Over Items').first().json['Secret Key']}}"
+      },
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 1,
+      "position": [
+        3216,
+        336
+      ],
+      "id": "0790b2de-ba94-4773-8476-30c0d4a8368a",
+      "name": "Crypto9"
+    },
+    {
+      "parameters": {
+        "method": "DELETE",
+        "url": "={{ $json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-MBX-APIKEY",
+              "value": "={{$('Loop Over Items').first().json[\"API Key\"]}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        3664,
+        336
+      ],
+      "id": "cd4bc7cd-63b4-4eb8-a951-6bc670337ca5",
+      "name": "delete-tp"
+    },
+    {
+      "parameters": {
+        "jsCode": "const timestamp = Date.now();\nconst recvWindow = $json.recvWindow;\nconst symbol = $('Loop Over Items').first().json.Pair;\nconst leverage = $('Loop Over Items').first().json.Laverage;\n\nconst queryString = `symbol=${symbol}&leverage=${leverage}&timestamp=${timestamp}&recvWindow=${recvWindow}`;\n\nreturn [{\n  json: {\n    ...$json,\n    timestamp,\n    queryString\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -128,
+        1648
+      ],
+      "id": "aa62609f-49b1-4d4c-b9c9-661df8d14e6d",
+      "name": "Code in JavaScript21"
+    },
+    {
+      "parameters": {
+        "action": "hmac",
+        "type": "SHA256",
+        "value": "={{ $json.queryString }}",
+        "dataPropertyName": "signature",
+        "secret": "={{ $('Loop Over Items').first().json['Secret Key']}}"
+      },
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 1,
+      "position": [
+        80,
+        1648
+      ],
+      "id": "80747cfc-dc4f-4658-a95f-9d3c1cfcf55b",
+      "name": "Crypto10"
+    },
+    {
+      "parameters": {
+        "jsCode": "const url =\n  `${$(\"base-api\").first().json.urlBase}/fapi/v1/leverage?` +\n  `${$(\"Crypto10\").first().json.queryString}&signature=${$(\"Crypto10\").first().json.signature}`;\n\nreturn [{\n  json: {\n    url,\n    apiKey: $('Loop Over Items').first().json[\"API Key\"]\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        288,
+        1648
+      ],
+      "id": "180e6a7f-0990-474d-b626-f63adecffaa2",
+      "name": "Code in JavaScript22"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-MBX-APIKEY",
+              "value": "={{$('Loop Over Items').first().json['API Key']}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        512,
+        1648
+      ],
+      "id": "9e902741-0f8c-472d-9830-e3c8059aa5f2",
+      "name": "set-leverage",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const timestamp = Date.now();\nconst recvWindow = $('base-api').first().json.recvWindow;\nconst symbol = $('Loop Over Items').first().json.Pair;\nconst algoType = \"CONDITIONAL\";\nconst side = $('check-side').first().json.openSide;\nconst type = \"LIMIT\";\nconst price = $('get-latest-OB').first().json.latestOB.avg;\nconst quantity = $('Loop Over Items').first().json.Size;\nconst timeInForce = \"GTC\";\n\nconst queryString = `symbol=${symbol}&side=${side}&type=${type}&price=${price}&quantity=${quantity}&timeInForce=${timeInForce}&timestamp=${timestamp}&recvWindow=${recvWindow}`;\n\nreturn [{\n  json: {\n    ...$json,\n    timestamp,\n    queryString\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        1632
+      ],
+      "id": "6105c037-8c58-455a-a72c-bc548a5a76f4",
+      "name": "Code in JavaScript23"
+    },
+    {
+      "parameters": {
+        "action": "hmac",
+        "type": "SHA256",
+        "value": "={{ $json.queryString }}",
+        "dataPropertyName": "signature",
+        "secret": "={{ $('Loop Over Items').first().json['Secret Key']}}"
+      },
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 1,
+      "position": [
+        1664,
+        1632
+      ],
+      "id": "69906a9c-cb54-414f-b496-029e055becd4",
+      "name": "Crypto11"
+    },
+    {
+      "parameters": {
+        "jsCode": "const url =\n  `${$('base-api').first().json.urlBase}/fapi/v1/order?` +\n  `${$(\"Crypto11\").first().json.queryString}&signature=${$(\"Crypto11\").first().json.signature}`;\n\nreturn [{\n  json: {\n    url,\n    apiKey: $('Loop Over Items').first().json[\"API Key\"]\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1872,
+        1632
+      ],
+      "id": "679a59ea-198a-43a0-b6b8-8c9d8f1fa550",
+      "name": "Code in JavaScript24"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $('get-latest-OB').first().json.latestOB;\nlet openSide,stopSide,sl,emote;\n\nif (data.type == \"bullish\") {\n  openSide = \"BUY\"\n  stopSide = \"SELL\"\n  sl = data.bottom\n  emote = \"🟢\"\n} else {\n  openSide = \"SELL\"\n  stopSide = \"BUY\"\n  sl = data.top\n  emote = \"🔴\"\n}\n\nreturn {openSide,stopSide,sl,emote}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        1648
+      ],
+      "id": "4ae66565-f32f-495b-b0fd-45a479c06656",
+      "name": "check-side"
+    },
+    {
+      "parameters": {
+        "jsCode": "const url =\n  `${$('base-api').first().json.urlBase}/fapi/v1/algoOrder?` +\n  `${$(\"Crypto12\").first().json.queryString}&signature=${$(\"Crypto12\").first().json.signature}`;\n\nreturn [{\n  json: {\n    url,\n    apiKey: $('Loop Over Items').first().json[\"API Key\"]\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2784,
+        1632
+      ],
+      "id": "ac3060ce-92f2-42d7-a53e-f7ee92d25cad",
+      "name": "Code in JavaScript25"
+    },
+    {
+      "parameters": {
+        "jsCode": "const timestamp = Date.now();\nconst recvWindow = $('base-api').first().json.recvWindow;\nconst symbol = $('Loop Over Items').first().json.Pair;\nconst side = $('check-side').first().json.stopSide;\n// const algoType = \"STOP_LOSS_LIMIT\";\nconst type = \"STOP_MARKET\";\nconst stopprice = $('check-side').first().json.sl;\nconst closePosition= true;\nconst reduceOnly = true;\nconst quantity = $('Loop Over Items').first().json.Size;\nconst workingType = \"CONTRACT_PRICE\";\n\nconst queryString = `algoType=CONDITIONAL&symbol=${symbol}&side=${side}&type=${type}&triggerPrice=${stopprice}&reducuOnly=${reduceOnly}&quantity=${quantity}&&workingType=${workingType}&timestamp=${timestamp}&recvWindow=${recvWindow}`;\n\nreturn [{\n  json: {\n    ...$json,\n    timestamp,\n    queryString\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2352,
+        1632
+      ],
+      "id": "124e9051-6d9e-4f23-b5d5-a34d1784ce4b",
+      "name": "Code in JavaScript26"
+    },
+    {
+      "parameters": {
+        "action": "hmac",
+        "type": "SHA256",
+        "value": "={{ $json.queryString }}",
+        "dataPropertyName": "signature",
+        "secret": "={{ $('Loop Over Items').first().json['Secret Key']}}"
+      },
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 1,
+      "position": [
+        2576,
+        1632
+      ],
+      "id": "dd40b778-d6e2-4f67-9ec4-e001c35fb3a4",
+      "name": "Crypto12"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $('sorting-sl-tp').first().json.side \nlet side;\n\nif (data == \"BUY\") {\n  side = \"SELL\"  \n} else {\n  side = \"BUY\"\n}\n\nreturn {side}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3888,
+        32
+      ],
+      "id": "a49b9d5f-8b3f-488c-bd1e-3952cccc3e86",
+      "name": "check-sl-side"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "f59f3cf9-10aa-4b21-9b1b-f4fcbf89acb2",
+              "leftValue": "={{ $('set-new-sl').item.json.newSL }}",
+              "rightValue": "={{ $('set-new-sl').item.json.currentSL }}",
+              "operator": {
+                "type": "number",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2192,
+        64
+      ],
+      "id": "7773fa7f-3178-462d-8859-8f7fdb4fcab8",
+      "name": "If1"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $('sorting-sl-tp').first().json.side;\nconst setTp = $('search-for-ABCvalue').first().json.tp\nconst lastPrice =$('get-price').first().json.price;\n\nlet side, tp;\n\nif (data === \"BUY\") {\n  side = \"SELL\";\n  tp = setTp > lastPrice;\n} else {\n  side = \"BUY\";\n  tp = setTp < lastPrice;\n}\n\nreturn [{ side, tp }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4096,
+        368
+      ],
+      "id": "7ee5650f-9ed1-4612-9d22-f1da9eec0b0a",
+      "name": "check-tp-side"
+    },
+    {
+      "parameters": {
+        "jsCode": "const timestamp = Date.now();\nconst recvWindow = $('base-api').first().json.recvWindow;\nconst algoId = $('Code in JavaScript16').first().json.stopOrders[0].orderId;\nconst clientId = $('Code in JavaScript16').first().json.stopOrders[0].clientId;\nconst symbol = $('Loop Over Items').first().json.Pair\n\n\nconst queryString = `symbol=${symbol}&algoId=${algoId}&clientAlgoId=${clientId}&timestamp=${timestamp}&recvWindow=${recvWindow}`;\n\nreturn [{\n  json: {\n    ...$json,\n    timestamp,\n    queryString\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4688,
+        1088
+      ],
+      "id": "80044d5a-0262-452f-9d35-04def704d760",
+      "name": "Code in JavaScript27"
+    },
+    {
+      "parameters": {
+        "action": "hmac",
+        "type": "SHA256",
+        "value": "={{ $json.queryString }}",
+        "dataPropertyName": "signature",
+        "secret": "={{ $('Loop Over Items').first().json['Secret Key']}}"
+      },
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 1,
+      "position": [
+        4912,
+        1088
+      ],
+      "id": "c3bb9517-f408-4f85-9b1c-09bc9e1dfa5e",
+      "name": "Crypto13"
+    },
+    {
+      "parameters": {
+        "jsCode": "const url =\n  `${$('base-api').first().json.urlBase}/fapi/v1/algoOrder?` +\n  `${$(\"Crypto13\").first().json.queryString}&signature=${$(\"Crypto13\").first().json.signature}`;\n\nreturn [{\n  json: {\n    url,\n    apiKey: $('base-api').first().json.apiKey\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5120,
+        1088
+      ],
+      "id": "71ecd39d-b682-4841-9e1e-8d4ae98fb08a",
+      "name": "Code in JavaScript28"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-MBX-APIKEY",
+              "value": "={{$('Loop Over Items').first().json['API Key']}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        2096,
+        1632
+      ],
+      "id": "ecadf296-816b-4142-80fe-1d5c4b9d6be4",
+      "name": "limit-order"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-MBX-APIKEY",
+              "value": "={{$('Loop Over Items').first().json['API Key']}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        3008,
+        1632
+      ],
+      "id": "5a58bbce-e99d-4ef4-a0f4-8351fd410183",
+      "name": "limit-order-sl",
+      "alwaysOutputData": false,
+      "retryOnFail": true,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "b91b360c-d2ca-4685-ad16-751fca5d78b3",
+              "leftValue": "={{ $json.message }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        528,
+        -400
+      ],
+      "id": "56d158d5-4dd9-456f-9052-49f0a175d357",
+      "name": "If4"
+    },
+    {
+      "parameters": {
+        "amount": 10
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        -448,
+        1104
+      ],
+      "id": "d3a6406d-ab6a-4f97-8785-6eff6be7e217",
+      "name": "Wait",
+      "webhookId": "06c475d0-0cd0-4620-80f0-b2097d8deaf6"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -1152,
+        -256
+      ],
+      "id": "752d1ab0-c3d9-40cc-8053-a34881200f49",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1744,
+        384
+      ],
+      "id": "cec98ba7-0556-4e38-8cba-0ad9487ac3ce",
+      "name": "Merge2"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "5349bbad-1795-4f13-a4f7-ee1e5a0306f4",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "ready",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -384,
+        -384
+      ],
+      "id": "af1bf438-fe6c-45f7-aaed-0faedf0e292f",
+      "name": "If8"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "be76a700-85cd-43c5-a293-2ea8801099f6",
+              "name": "=time",
+              "value": "={{ $('get-latest-OB').first().json.latestOB.time }}",
+              "type": "number"
+            },
+            {
+              "id": "c6192bce-c463-404e-800d-8259b4cc25f0",
+              "name": "top",
+              "value": "={{ $('get-latest-OB').first().json.latestOB.top }}",
+              "type": "number"
+            },
+            {
+              "id": "6325bc4b-0799-4bac-84a7-2ca497394269",
+              "name": "bottom",
+              "value": "={{ $('get-latest-OB').first().json.latestOB.bottom }}",
+              "type": "number"
+            },
+            {
+              "id": "b9498fc8-86c1-4610-9556-0c9f8f89d393",
+              "name": "avg",
+              "value": "={{ $('get-latest-OB').first().json.latestOB.avg }}",
+              "type": "number"
+            },
+            {
+              "id": "37af2dc7-0e6c-4156-9078-576b8de8a8ae",
+              "name": "type",
+              "value": "={{ $('get-latest-OB').first().json.latestOB.type }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1168,
+        2144
+      ],
+      "id": "8640756d-a5ab-44a1-becf-725454883d33",
+      "name": "Edit Fields1"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1t5ZPW3nVbXDZiGT8I7-7L8agFeybHH2U0oq9EmtQ-Ek",
+          "mode": "list",
+          "cachedResultName": "ob_history",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1t5ZPW3nVbXDZiGT8I7-7L8agFeybHH2U0oq9EmtQ-Ek/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{$('Loop Over Items').first().json.Pair}}",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "time",
+              "displayName": "time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "top",
+              "displayName": "top",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "bottom",
+              "displayName": "bottom",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "avg",
+              "displayName": "avg",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "type",
+              "displayName": "type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        1376,
+        2144
+      ],
+      "id": "64629885-9d93-4ce0-b639-53129bb17417",
+      "name": "Append row in sheet",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "h88H41rnVTqQz4v5",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "fileFolder",
+        "queryString": "ob_history",
+        "returnAll": true,
+        "filter": {
+          "folderId": {
+            "__rl": true,
+            "value": "11boxvVyWRdNg5sx6xzyB5khMC5MwJTC-",
+            "mode": "list",
+            "cachedResultName": "Binance Autotrade",
+            "cachedResultUrl": "https://drive.google.com/drive/folders/11boxvVyWRdNg5sx6xzyB5khMC5MwJTC-"
+          }
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -128,
+        2144
+      ],
+      "id": "ae1d2190-52fb-429a-9e2e-cffd8257f035",
+      "name": "Search files and folders",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "peCdfEP2DxMaZBwr",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://sheets.googleapis.com/v4/spreadsheets/{{ $json.id }}",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googleDriveOAuth2Api",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        80,
+        2144
+      ],
+      "id": "f961d786-24d6-42be-80c5-1d101e3767d5",
+      "name": "HTTP Request1",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "peCdfEP2DxMaZBwr",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const symbol = $('Loop Over Items').first().json.Pair;\nconst sheets = $input.first().json.sheets || [];\n\nconst exists = sheets.some(s => s.properties.title === symbol);\n\nreturn [{\n  json: {\n    symbol,\n    sheetExists: exists\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        288,
+        2144
+      ],
+      "id": "88ca4462-e7fb-4064-815d-e52d2ab6b2ca",
+      "name": "Code in JavaScript8"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "d597a54f-c7be-4417-94c3-d17f953344b0",
+              "leftValue": "={{ $json.sheetExists }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        496,
+        2144
+      ],
+      "id": "617e8171-c370-4690-8580-1a13c12d5539",
+      "name": "If9"
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "documentId": {
+          "__rl": true,
+          "value": "1t5ZPW3nVbXDZiGT8I7-7L8agFeybHH2U0oq9EmtQ-Ek",
+          "mode": "list",
+          "cachedResultName": "ob_history",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1t5ZPW3nVbXDZiGT8I7-7L8agFeybHH2U0oq9EmtQ-Ek/edit?usp=drivesdk"
+        },
+        "title": "={{ $json.symbol }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        720,
+        2160
+      ],
+      "id": "0127a28d-11b3-436f-9486-80aadb668f53",
+      "name": "Create sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "h88H41rnVTqQz4v5",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        960,
+        2144
+      ],
+      "id": "7b386115-4407-497e-afa4-5cc683994820",
+      "name": "Merge3"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Loop Over Items').first().json.id_chat }}",
+        "text": "=📊 *ORDER BLOCK DETECTED*\n\nSymbol     : *{{ $('Loop Over Items').first().json.Pair }}*\nType       : *{{ $('Append row in sheet').first().json.type }}*\n\n🧱 OB Zone:\n• Top      : `{{ $('Append row in sheet').first().json.top }}`\n• Avg      : `{{ $('Append row in sheet').first().json.avg }}`\n• Bottom   : `{{ $('Append row in sheet').first().json.bottom }}`\n\n{{$('check-side').first().json.emote}} *LIMIT ORDER PLACED*\n\nSide       : *{{ $('check-side').first().json.openSide }}*\nEntry      : `{{ $('Append row in sheet').first().json.avg }}`\nStop Loss  : `{{ $('check-side').first().json.sl }}`\n\n⚙️ Strategy: OB + Fibonacci Extension\n",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1840,
+        2128
+      ],
+      "id": "ad35b1f8-c24e-4b20-95ec-76ee00549293",
+      "name": "limit-order-notificaion",
+      "webhookId": "7b13925d-2bf3-46c9-9ffc-6a51da669618",
+      "credentials": {
+        "telegramApi": {
+          "id": "7UenbM8dno9nyv5G",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Loop Over Items').first().json.id_chat }}",
+        "text": "=_New Order block have been detected_\n_Latest limit order will update with a new OB_\n",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        5760,
+        1104
+      ],
+      "id": "63c06a8d-db1e-47b8-9222-43490febd892",
+      "name": "limit-order-deleted-notificaion",
+      "webhookId": "7b13925d-2bf3-46c9-9ffc-6a51da669618",
+      "credentials": {
+        "telegramApi": {
+          "id": "7UenbM8dno9nyv5G",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "27583161-8e0b-4fb9-9ba1-5c11d1d3faf6",
+              "leftValue": "={{ $('check-tp-side').first().json.tp }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        4304,
+        368
+      ],
+      "id": "e7c0c47e-d8ef-4909-8897-2e95186bcae5",
+      "name": "If10"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "444f14c2-fd5c-411a-90fe-b3278f1ba2ae",
+              "leftValue": "={{ Math.round($('HTTP Request').first().json.totalMarginBalance) }}",
+              "rightValue": "={{ Math.round($('orderblock-detector').first().json.lastPrice / $('Loop Over Items').first().json.Laverage * $('Loop Over Items').first().json.Size)}}",
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2080,
+        -384
+      ],
+      "id": "16c9c06d-55dd-413e-b6bb-feec3b511f6e",
+      "name": "If11"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "00cfa839-b200-4b4d-ba82-46d16858ed5d",
+              "leftValue": "={{ $json.limitOrders[0].orderId }}",
+              "rightValue": "",
+              "operator": {
+                "type": "number",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1696,
+        1104
+      ],
+      "id": "bef7d002-2317-4018-b34c-ffb4ed288281",
+      "name": "If12"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        2800,
+        1104
+      ],
+      "id": "3ea1863e-71d7-4a56-beea-fc6af8665048",
+      "name": "Merge5"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "934d6db8-d1cc-426b-95a5-37a9883863bc",
+              "leftValue": "={{ $('Code in JavaScript16').first().json.takeProfitOrders[0].orderId }}",
+              "rightValue": "",
+              "operator": {
+                "type": "number",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        3008,
+        1104
+      ],
+      "id": "9f4c01b5-81f8-413b-bbac-6386868ed529",
+      "name": "If13"
+    },
+    {
+      "parameters": {
+        "jsCode": "const url =\n  `${$(\"base-api\").first().json.urlBase}/fapi/v1/algoOrder?` +\n  `${$(\"Crypto14\").first().json.queryString}&signature=${$(\"Crypto14\").first().json.signature}`;\n\nreturn [{\n  json: {\n    url,\n    apiKey: $('Loop Over Items').first().json[\"API Key\"]\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3744,
+        976
+      ],
+      "id": "28346753-b223-4ba7-a944-90f9e3a242ca",
+      "name": "Code in JavaScript29"
+    },
+    {
+      "parameters": {
+        "jsCode": "const timestamp = Date.now();\nconst recvWindow = $('base-api').first().json.recvWindow;\nconst algoId = $('Code in JavaScript16').first().json.takeProfitOrders[0].orderId;\nconst clientId = $('Code in JavaScript16').first().json.takeProfitOrders[0].clientId;\nconst symbol = $('Loop Over Items').first().json.Pair\n\n\nconst queryString = `symbol=${symbol}&algoId=${algoId}&clientAlgoId=${clientId}&timestamp=${timestamp}&recvWindow=${recvWindow}`;\n\nreturn [{\n  json: {\n    ...$json,\n    timestamp,\n    queryString\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3312,
+        976
+      ],
+      "id": "6e570b76-474f-493b-9b6a-037dd396e206",
+      "name": "Code in JavaScript30"
+    },
+    {
+      "parameters": {
+        "action": "hmac",
+        "type": "SHA256",
+        "value": "={{ $json.queryString }}",
+        "dataPropertyName": "signature",
+        "secret": "={{ $('Loop Over Items').first().json['Secret Key']}}"
+      },
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 1,
+      "position": [
+        3520,
+        976
+      ],
+      "id": "b125685b-3e7f-4ffb-bf08-581a90d68596",
+      "name": "Crypto14"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c4f67b81-8ba6-493d-b1e8-ade1aa5aaf5a",
+              "name": "urlBase",
+              "value": "https://fapi.binance.com",
+              "type": "string"
+            },
+            {
+              "id": "f6d9f60b-b515-480a-8acd-41d2698d1104",
+              "name": "recvWindow",
+              "value": "5000",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        832,
+        -384
+      ],
+      "id": "5b14edf3-e0e2-409d-bc8f-0cff919ae46d",
+      "name": "base-api"
+    },
+    {
+      "parameters": {
+        "method": "DELETE",
+        "url": "={{ $json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-MBX-APIKEY",
+              "value": "={{$('Loop Over Items').first().json[\"API Key\"]}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        3968,
+        976
+      ],
+      "id": "cb1fcb96-d75f-42e6-9550-f4251f43c5d8",
+      "name": "delete-tp-order"
+    },
+    {
+      "parameters": {
+        "method": "DELETE",
+        "url": "={{ $json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-MBX-APIKEY",
+              "value": "={{$('Loop Over Items').first().json['API Key']}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        5344,
+        1088
+      ],
+      "id": "b997bbd6-2f74-4fa3-bb91-2521eb6b23da",
+      "name": "delete-sl-order"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        4224,
+        1104
+      ],
+      "id": "b7943cd5-1b93-4427-8f67-32752b836e4b",
+      "name": "Merge6"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "da0d9cdc-19ae-4f37-8dd5-22c76539c4a5",
+              "leftValue": "={{ $('Code in JavaScript16').first().json.stopOrders[0].orderId }}",
+              "rightValue": "",
+              "operator": {
+                "type": "number",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        4432,
+        1104
+      ],
+      "id": "1d567b4e-c759-4320-9ba8-cb565332de3f",
+      "name": "If14"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        5552,
+        1104
+      ],
+      "id": "8d0fdb4e-1884-42c3-90f1-13a9144cbf4e",
+      "name": "Merge4"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1t5ZPW3nVbXDZiGT8I7-7L8agFeybHH2U0oq9EmtQ-Ek",
+          "mode": "list",
+          "cachedResultName": "ob_history",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1t5ZPW3nVbXDZiGT8I7-7L8agFeybHH2U0oq9EmtQ-Ek/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $('Loop Over Items').first().json.Pair }}",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        112,
+        64
+      ],
+      "id": "88b5823a-fad5-4007-ad86-6dc2489c3007",
+      "name": "ob-history",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "h88H41rnVTqQz4v5",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "a74bb965-b1e0-474d-8d88-afbd121f2363",
+              "leftValue": "={{ $('search-for-ABCvalue').first().json.tp}}",
+              "rightValue": "",
+              "operator": {
+                "type": "number",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2016,
+        384
+      ],
+      "id": "132ff8aa-ff6f-4d92-b439-fc503383f4e2",
+      "name": "If15"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst lastPrice = parseFloat(input.lastPrice);\nconst bullishOB = input.bullishOB || [];\nconst bearishOB = input.bearishOB || [];\n\nconst allOBWithDistance = [\n    ...bullishOB.map(ob => ({\n        ...ob,\n        type: \"bullish\",\n        distance: Math.abs(lastPrice - parseFloat(ob.top))\n    })),\n    ...bearishOB.map(ob => ({\n        ...ob,\n        type: \"bearish\",\n        distance: Math.abs(lastPrice - parseFloat(ob.bottom))\n    }))\n];\n\nif (allOBWithDistance.length === 0) {\n    return [{\n        json: {\n            message: \"No Order Block Found\",\n            symbol: $('Loop Over Items').first().json.Pair,\n            timeframe: input.timeframe\n        }\n    }];\n}\n\nconst closestOB = allOBWithDistance.reduce((prev, current) =>\n    current.distance < prev.distance ? current : prev\n);\n\nfunction format1(value) {\n    return Number(parseFloat(value).toFixed(1));\n}\n\nreturn [{\n    json: {\n        symbol: $('Loop Over Items').first().json.Pair,\n        timeframe: input.timeframe,\n        lastPrice: lastPrice,\n\n        latestOB: {\n            ...closestOB,\n            top: format1(closestOB.top),\n            avg: format1(closestOB.avg),\n            bottom: format1(closestOB.bottom)\n        }\n    }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        320,
+        -400
+      ],
+      "id": "1d57fe84-9a5e-4c4a-ad28-5de717d3725f",
+      "name": "get-latest-OB"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "5c0f7bd1-8a3c-43ad-8f2f-7164b4e36bcd",
+              "leftValue": "={{ $('sl-validation').first().json.slHit }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2768,
+        48
+      ],
+      "id": "a7fd5be5-8b66-4ad1-9399-e4d6015a4aeb",
+      "name": "If16"
+    },
+    {
+      "parameters": {
+        "jsCode": "const lastPrice = $('set-new-sl').first().json.lastPrice;\nconst newSL = $('set-new-sl').first().json.newSL;\nconst positionSide = $('check-position').first().json.side;\n\nlet slValidation = false;\n\nif (!isNaN(lastPrice) && !isNaN(newSL)) {\n\n  if (positionSide === \"BUY\") {\n    slValidation = lastPrice > newSL;\n  } \n  \n  else if (positionSide === \"SELL\") {\n    slValidation = lastPrice < newSL;\n  }\n\n}\n\nreturn [{\n  positionSide,\n  lastPrice,\n  newSL,\n  slHit: slValidation\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2496,
+        48
+      ],
+      "id": "26c6f3e2-51b9-4d35-8010-847a7d2d112d",
+      "name": "sl-validation"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1488,
+        400
+      ],
+      "id": "58507edd-2cf9-4638-9473-fb0957c80fb7",
+      "name": "Merge8"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $(\"OHLC\").all();\nconst obNode = $('get-latest-OB').first().json;\nconst ob = obNode.latestOB;\nconst lastPrice = obNode.lastPrice;\n\nconst candles = items.map(c => ({\n  time: Number(c.json[0]),\n  open: parseFloat(c.json[1]),\n  high: parseFloat(c.json[2]),\n  low: parseFloat(c.json[3]),\n  close: parseFloat(c.json[4]),\n  volume: parseFloat(c.json[5])\n}));\n\nif (candles.length < 50) return [{ json: { error: \"Need more candles\" } }];\n\nconst n = candles.length;\nconst c1 = candles[n - 1]; \nconst c2 = candles[n - 2]; \nconst c3 = candles[n - 3];\n\nconst calculateYZVol = (data, period = 24) => {\n    const subset = data.slice(-period);\n    const log = (val) => Math.log(val);\n    let s_o = 0, s_c = 0, s_rs = 0;\n    for (let i = 1; i < subset.length; i++) {\n        s_o += Math.pow(log(subset[i].open / subset[i-1].close), 2);\n        s_c += Math.pow(log(subset[i].close / subset[i].open), 2);\n        s_rs += log(subset[i].high/subset[i].close) * log(subset[i].high/subset[i].open) +\n                log(subset[i].low/subset[i].close) * log(subset[i].low/subset[i].open);\n    }\n    const k = 0.34 / (1.34 + (period + 1) / (period - 1));\n    return Math.sqrt((s_o / period) + k * (s_c / period) + (1 - k) * (s_rs / period));\n};\n\nconst yzVol = calculateYZVol(candles);\nconst priceShock = Math.abs(c2.close - c2.open) / (c2.open * yzVol);\n\nfunction EMA(data, period) {\n  const k = 2 / (period + 1);\n  let ema = data[0].close;\n  for (let i = 1; i < data.length; i++) {\n    ema = data[i].close * k + ema * (1 - k);\n  }\n  return ema;\n}\n\nconst ema20 = EMA(candles, 20);\nconst ema50 = EMA(candles, 50);\nconst isTrending = Math.abs(ema20 - ema50) / ema50 > 0.001; \n\nlet score = 0;\nconst isBullish = ob.type.toLowerCase() === 'bullish';\n\nlet tScore = 0;\nconst hasSweep = isBullish ? (c2.low < ob.bottom) : (c2.high > ob.top);\nconst trendAligned = isBullish ? (c1.close > ema20) : (c1.close < ema20);\n\nif (hasSweep) tScore = 1.0;\nelse if (!ob.mitigated && trendAligned) tScore = 0.8;\nelse tScore = 0.4;\n\nlet vScore = (priceShock > 0.5 && priceShock < 2.5) ? 1.0 : 0.5;\n\nlet dScore = (priceShock > 1.2) ? 1.0 : 0.6;\n\nconst avgVol = candles.slice(-20).reduce((a,b) => a + b.volume, 0) / 20;\nconst volRatio = c1.volume / avgVol;\nlet lScore = (volRatio > 1.5) ? 1.0 : (volRatio > 1.0 ? 0.7 : 0.4);\n\nconst finalScore = (tScore * 30) + (vScore * 20) + (dScore * 30) + (lScore * 20);\n\nconst entryPrice = ob.avg;\nconst stopLoss = isBullish ? ob.bottom : ob.top;\nconst isFresh = !ob.mitigated;\n\nlet decision = \"NO TRADE\";\nconst distanceToEntry = Math.abs(lastPrice - entryPrice) / lastPrice;\nconst minGap = yzVol * 0.15; \n\nif (finalScore >= 60 && isFresh && distanceToEntry > minGap) {\n    if (isBullish && lastPrice > entryPrice) decision = \"LIMIT\";\n    if (!isBullish && lastPrice < entryPrice) decision = \"LIMIT\";\n}\n\nreturn [{\n  json: {\n    decision: decision,\n    confidence: finalScore.toFixed(2),\n    market_regime: {\n      volatility: yzVol.toFixed(5),\n      price_shock: priceShock.toFixed(2),\n      is_trending: isTrending,\n      volume_ratio: volRatio.toFixed(2)\n    },\n    execution_params: {\n      side: isBullish ? \"BUY\" : \"SELL\",\n      entry: entryPrice,\n      sl: stopLoss,\n      tp: isBullish \n          ? parseFloat((entryPrice + (entryPrice - stopLoss) * 2.5).toFixed(2))\n          : parseFloat((entryPrice - (stopLoss - entryPrice) * 2.5).toFixed(2))\n    },\n    structure_check: {\n      liquidity_sweep: hasSweep,\n      is_mitigated: ob.mitigated\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        944,
+        1648
+      ],
+      "id": "216da1da-acc9-486a-8c5b-be6646e61a99",
+      "name": "confidence-score"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "b1027c03-49af-4e87-b512-8af82727db40",
+              "leftValue": "={{ $json.decision }}",
+              "rightValue": "LIMIT",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1168,
+        1648
+      ],
+      "id": "dde91ae0-0252-4da5-8118-68cc612e0f15",
+      "name": "If23"
+    },
+    {
+      "parameters": {
+        "url": "=https://fapi.binance.com/fapi/v1/klines?symbol={{ $('Loop Over Items').first().json.Pair }}&interval={{$('Loop Over Items').first().json.timeframe}}&limit=1000",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -128,
+        -400
+      ],
+      "id": "7503762d-069e-4008-9048-e7b69f9d3b7c",
+      "name": "OHLC",
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "f8cf7f08-a287-4728-97de-3848201ea5a1",
+              "leftValue": "={{ $('Loop Over Items').first().json.id_chat }}",
+              "rightValue": "",
+              "operator": {
+                "type": "number",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1584,
+        2144
+      ],
+      "id": "80ec6615-3dfa-47a1-855f-5d74879b643f",
+      "name": "If24"
+    },
+    {
+      "parameters": {
+        "jsCode": "const url =\n  `${$(\"base-api\").first().json.urlBase}/fapi/v1/allAlgoOrders?` +\n  `${$(\"Crypto18\").first().json.queryString}&signature=${$(\"Crypto18\").first().json.signature}`;\n\nreturn [{\n  json: {\n    url,\n    apiKey: $('Loop Over Items').first().json[\"API Key\"]\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        288,
+        992
+      ],
+      "id": "fdbca180-4bab-4287-8324-2e8a6e49c4a0",
+      "name": "Code in JavaScript39"
+    },
+    {
+      "parameters": {
+        "jsCode": "const timestamp = Date.now();\nconst recvWindow = $json.recvWindow;\n\nconst queryString = `symbol=${$('Loop Over Items').first().json.Pair}&timestamp=${timestamp}&recvWindow=${recvWindow}`;\n\nreturn [{\n  json: {\n    ...$json,\n    timestamp,\n    queryString\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -144,
+        992
+      ],
+      "id": "5af9eca8-f1ee-4980-b7a0-24a78a5ab489",
+      "name": "Code in JavaScript40"
+    },
+    {
+      "parameters": {
+        "action": "hmac",
+        "type": "SHA256",
+        "value": "={{ $json.queryString }}",
+        "dataPropertyName": "signature",
+        "secret": "={{ $('Loop Over Items').first().json['Secret Key']}}"
+      },
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 1,
+      "position": [
+        64,
+        992
+      ],
+      "id": "6b85cc9e-142b-4642-b6c3-66c578479f33",
+      "name": "Crypto18"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-MBX-APIKEY",
+              "value": "={{$('Loop Over Items').first().json[\"API Key\"]}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        512,
+        992
+      ],
+      "id": "4d2a9271-5ece-4dc5-98e5-82c8f494a9aa",
+      "name": "get-sl-tp1",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        784,
+        1104
+      ],
+      "id": "8bf7e094-469b-465b-8505-a8c259713604",
+      "name": "Merge10"
+    },
+    {
+      "parameters": {
+        "url": "https://ifconfig.me/all.json",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -112,
+        -848
+      ],
+      "id": "0206d719-df6d-4303-89b5-45d5bd40f952",
+      "name": "check-ip"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "api-account",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "orderblock-detector": {
+      "main": [
+        [
+          {
+            "node": "get-latest-OB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "api-account": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [],
+        [
+          {
+            "node": "If8",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Crypto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crypto": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "check-position",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "check-position": {
+      "main": [
+        [
+          {
+            "node": "If11",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "ob-history",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code in JavaScript15",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Code in JavaScript40",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript2": {
+      "main": [
+        [
+          {
+            "node": "get-sl-tp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript3": {
+      "main": [
+        [
+          {
+            "node": "Crypto1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crypto1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "search-for-ABCvalue": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get-price": {
+      "main": [
+        [
+          {
+            "node": "set-new-sl",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript4": {
+      "main": [
+        [
+          {
+            "node": "delete-sl",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript5": {
+      "main": [
+        [
+          {
+            "node": "Crypto2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crypto2": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "sorting-sl-tp": {
+      "main": [
+        [
+          {
+            "node": "get-price",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get-sl-tp": {
+      "main": [
+        [
+          {
+            "node": "sorting-sl-tp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript6": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript7": {
+      "main": [
+        [
+          {
+            "node": "Crypto3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crypto3": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript6",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "delete-sl": {
+      "main": [
+        [
+          {
+            "node": "check-sl-side",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request3": {
+      "main": [
+        [
+          {
+            "node": "Merge8",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "set-new-sl": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If3": {
+      "main": [
+        [
+          {
+            "node": "If5",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript10": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript11": {
+      "main": [
+        [
+          {
+            "node": "Crypto5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crypto5": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript10",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If5": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code in JavaScript20",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge1": {
+      "main": [
+        [
+          {
+            "node": "check-tp-side",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request5": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript15": {
+      "main": [
+        [
+          {
+            "node": "Crypto7",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crypto7": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript14",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "check-limit-order": {
+      "main": [
+        [
+          {
+            "node": "Merge10",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript16": {
+      "main": [
+        [
+          {
+            "node": "If6",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If6": {
+      "main": [
+        [
+          {
+            "node": "If7",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Code in JavaScript21",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript14": {
+      "main": [
+        [
+          {
+            "node": "check-limit-order",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript17": {
+      "main": [
+        [
+          {
+            "node": "Crypto8",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crypto8": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript18",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript18": {
+      "main": [
+        [
+          {
+            "node": "delete-limit-order",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If7": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "If12",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript19": {
+      "main": [
+        [
+          {
+            "node": "delete-tp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript20": {
+      "main": [
+        [
+          {
+            "node": "Crypto9",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crypto9": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript19",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "delete-tp": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript21": {
+      "main": [
+        [
+          {
+            "node": "Crypto10",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crypto10": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript22",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript22": {
+      "main": [
+        [
+          {
+            "node": "set-leverage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript23": {
+      "main": [
+        [
+          {
+            "node": "Crypto11",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crypto11": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript24",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript24": {
+      "main": [
+        [
+          {
+            "node": "limit-order",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "set-leverage": {
+      "main": [
+        [
+          {
+            "node": "check-side",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "check-side": {
+      "main": [
+        [
+          {
+            "node": "confidence-score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript25": {
+      "main": [
+        [
+          {
+            "node": "limit-order-sl",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript26": {
+      "main": [
+        [
+          {
+            "node": "Crypto12",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crypto12": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript25",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "check-sl-side": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript7",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "sl-validation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge8",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "check-tp-side": {
+      "main": [
+        [
+          {
+            "node": "If10",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript27": {
+      "main": [
+        [
+          {
+            "node": "Crypto13",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crypto13": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript28",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript28": {
+      "main": [
+        [
+          {
+            "node": "delete-sl-order",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "delete-limit-order": {
+      "main": [
+        [
+          {
+            "node": "Merge5",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "limit-order": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript26",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "limit-order-sl": {
+      "main": [
+        [
+          {
+            "node": "Search files and folders",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If4": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "base-api",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "api-account",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge2": {
+      "main": [
+        [
+          {
+            "node": "If15",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If8": {
+      "main": [
+        [
+          {
+            "node": "OHLC",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields1": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search files and folders": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript8",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript8": {
+      "main": [
+        [
+          {
+            "node": "If9",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If9": {
+      "main": [
+        [
+          {
+            "node": "Merge3",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create sheet": {
+      "main": [
+        [
+          {
+            "node": "Merge3",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge3": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet": {
+      "main": [
+        [
+          {
+            "node": "If24",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "limit-order-deleted-notificaion": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript21",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "limit-order-notificaion": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If10": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript11",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If11": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If12": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript17",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge5",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge5": {
+      "main": [
+        [
+          {
+            "node": "If13",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript29": {
+      "main": [
+        [
+          {
+            "node": "delete-tp-order",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript30": {
+      "main": [
+        [
+          {
+            "node": "Crypto14",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crypto14": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript29",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If13": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript30",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge6",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "base-api": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "delete-sl-order": {
+      "main": [
+        [
+          {
+            "node": "Merge4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "delete-tp-order": {
+      "main": [
+        [
+          {
+            "node": "Merge6",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge6": {
+      "main": [
+        [
+          {
+            "node": "If14",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If14": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript27",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge4",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge4": {
+      "main": [
+        [
+          {
+            "node": "limit-order-deleted-notificaion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ob-history": {
+      "main": [
+        [
+          {
+            "node": "search-for-ABCvalue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If15": {
+      "main": [
+        [
+          {
+            "node": "If3",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get-latest-OB": {
+      "main": [
+        [
+          {
+            "node": "If4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "sl-validation": {
+      "main": [
+        [
+          {
+            "node": "If16",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If16": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript5",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge8": {
+      "main": [
+        [
+          {
+            "node": "Merge2",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "confidence-score": {
+      "main": [
+        [
+          {
+            "node": "If23",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If23": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript23",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OHLC": {
+      "main": [
+        [
+          {
+            "node": "orderblock-detector",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If24": {
+      "main": [
+        [
+          {
+            "node": "limit-order-notificaion",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript39": {
+      "main": [
+        [
+          {
+            "node": "get-sl-tp1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript40": {
+      "main": [
+        [
+          {
+            "node": "Crypto18",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crypto18": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript39",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get-sl-tp1": {
+      "main": [
+        [
+          {
+            "node": "Merge10",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge10": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript16",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false
+  },
+  "versionId": "b8662e35-c642-41c3-88f8-66c24118a6bb",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "b04c0dcf980444568d2f38cef7390ffab0eb7fabad0a7206f3e7fe693f97faf5"
+  },
+  "id": "nBKYpH1E6zMZ4HKBk41of",
+  "tags": []
+}
