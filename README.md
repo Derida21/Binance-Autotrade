@@ -205,18 +205,7 @@ Use at your own responsibility.
 
 # 👨‍💻 Author
 
-Built by Deri Elf
+Built by Derida21
 Automation & Trading System Developer
 Specialized in workflow automation and API-based system engineering.
 
----
-
-Jika kamu mau, aku bisa lanjutkan dengan:
-
-* 📊 Tambah architecture diagram visual
-* 🧠 Tambah section "Why AlgoOrder instead of normal order"
-* 🔥 Buat versi yang lebih “Quant Fund” style
-* 🛡 Tambah professional risk section seperti hedge fund documentation
-* 📦 Tambahkan folder structure suggestion untuk repo
-
-Tinggal bilang mau upgrade ke level mana 😄
