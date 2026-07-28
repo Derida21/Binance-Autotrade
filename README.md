@@ -1,16 +1,12 @@
-Berikut adalah revisi README.md yang telah diterjemahkan ke dalam Bahasa Indonesia dengan penyesuaian istilah teknis agar tetap akurat namun mudah dipahami:
+## 🚀 Binance Autotrade – Sistem Trading Futures Berbasis Order Block
 
----
-
-# 🚀 Binance Autotrade – Sistem Trading Futures Berbasis Order Block
-
-Sistem perdagangan Binance Futures yang sepenuhnya otomatis dan dibangun menggunakan **n8n**. Mengimplementasikan deteksi *Order Block* kustom, manajemen risiko terstruktur, serta logika *Stop Loss* / *Take Profit* dinamis menggunakan API Binance (permintaan bertanda tangan HMAC SHA256).
+Sistem perdagangan Binance Futures yang sepenuhnya otomatis dan dibangun menggunakan **n8n**. Mengimplementasikan deteksi *Order Block* yang bersumber dari [Luxalgo](https://id.tradingview.com/pine/?id=PUB%3B7c893384ebc34d83b9f1ec3275e2f002), manajemen risiko terstruktur, serta logika *Stop Loss* / *Take Profit* dinamis menggunakan API Binance (permintaan bertanda tangan HMAC SHA256).
 
 ---
 
 ## 📌 Ikhtisar
 
-Proyek ini adalah alur kerja (*workflow*) perdagangan otomatis ujung-ke-ujung yang berfungsi untuk:
+Proyek ini adalah *workflow* trading otomatis *end-to-end* yang berfungsi untuk:
 
 * Mendeteksi *Bullish* & *Bearish Order Blocks*.
 * Mengeksekusi entri *LIMIT*.
@@ -26,6 +22,9 @@ Dibangun menggunakan:
 * 🔁 Otomatisasi *workflow* n8n.
 * 🔐 Binance Futures REST API (*signed*).
 * 📊 Deteksi struktur pasar pada *timeframe* 1 Jam (1H).
+
+Overview workflow:
+![](overview-workflow.png)
 
 ---
 
@@ -144,8 +143,13 @@ Sistem menyertakan logika *anti-downgrade* (SL tidak akan pernah bergerak mundur
 **Berjalan sepenuhnya otomatis.**
 
 ---
+## Future Imporvement
+1. Workflow **Telegram Notification**
+2. Workflow **Generating Report**
+3. Workflow **Error Notification**
+---
 
-# ⚠️ Penafian Risiko (Risk Disclaimer)
+# ⚠️ Risk Disclaimer
 
 Proyek ini dibuat hanya untuk tujuan pendidikan dan penelitian.
 Perdagangan *cryptocurrency futures* melibatkan risiko tinggi. Gunakan dengan tanggung jawab Anda sendiri.
