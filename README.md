@@ -143,7 +143,7 @@ Sistem menyertakan logika *anti-downgrade* (SL tidak akan pernah bergerak mundur
 **Berjalan sepenuhnya otomatis.**
 
 ---
-## Future Imporvement
+# 🚀 Future Improvement
 1. Workflow **Telegram Notification**
 2. Workflow **Generating Report**
 3. Workflow **Error Notification**
